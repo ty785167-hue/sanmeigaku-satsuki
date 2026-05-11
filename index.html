@@ -42,6 +42,7 @@
 
     <section class="summary-grid" id="summary"></section>
     <section class="panel day-reading-panel" id="dayReadingPanel"></section>
+    <section class="panel tenchusatsu-panel" id="tenchusatsuPanel"></section>
 
     <div class="workspace">
       <div class="stack">
@@ -307,8 +308,67 @@
       }
     };
 
+    const TENCHUSATSU_TYPES = [
+      {
+        name: "戌亥天中殺",
+        branches: ["戌", "亥"],
+        keyword: "精神性・理想・内面の探求",
+        text: "戌亥天中殺の人は、精神性や理想を大切にし、自分の内側にある答えを探し続けるタイプです。現実だけに染まりきらず、独自の価値観や信念を持ちやすい人です。",
+        advice: "成功の鍵は、理想を語るだけでなく、日々の行動に落とし込むことです。信頼できる人に考えを共有すると、孤独になりすぎず力を発揮できます。",
+        yearAdvice: "戌年・亥年は天中殺年です。大きな決断を急ぐより、内省、整理、学び直しに向く時期です。"
+      },
+      {
+        name: "申酉天中殺",
+        branches: ["申", "酉"],
+        keyword: "実務力・整理力・結果への集中",
+        text: "申酉天中殺の人は、現実を動かす実務力と、物事を整えて結果に結びつける力を持つタイプです。頭の回転が早く、改善点を見つけるのも得意です。",
+        advice: "成功の鍵は、正しさや効率だけに偏らず、人の気持ちも一緒に扱うことです。厳しさに温かさを足すと運が安定します。",
+        yearAdvice: "申年・酉年は天中殺年です。成果を急ぎすぎず、整理、見直し、仕組み作りを優先すると流れが整います。"
+      },
+      {
+        name: "午未天中殺",
+        branches: ["午", "未"],
+        keyword: "表現力・情熱・人を育てる力",
+        text: "午未天中殺の人は、明るい表現力と、人や場を育てる温かさを持つタイプです。人前で力が出やすく、周囲を照らすような存在感があります。",
+        advice: "成功の鍵は、感情の勢いだけで動かず、継続できる形に整えることです。休む時間を先に確保すると魅力が長持ちします。",
+        yearAdvice: "午年・未年は天中殺年です。目立つ勝負より、関係性や生活基盤を整えることに向く時期です。"
+      },
+      {
+        name: "辰巳天中殺",
+        branches: ["辰", "巳"],
+        keyword: "現実的な行動力・高い理想・リーダーシップ",
+        text: "辰巳天中殺の人は、現実的な行動力と高い理想を併せ持つタイプです。一度決めたことは最後までやり抜く粘り強さがあり、リーダーシップにも優れています。",
+        advice: "ただし、完璧を求めすぎるあまり、周囲の意見を受け入れにくくなる傾向も。成功の鍵は、柔軟さと人との協調を意識することです。",
+        yearAdvice: "辰年・巳年は天中殺年です。大きく押し切るより、柔軟さ、協調、見直しを意識すると流れを活かせます。"
+      },
+      {
+        name: "寅卯天中殺",
+        branches: ["寅", "卯"],
+        keyword: "成長力・人脈・未来を広げる力",
+        text: "寅卯天中殺の人は、前へ伸びる力と、人との縁を広げる力を持つタイプです。新しい場所や人間関係の中で、自分の可能性を開きやすい人です。",
+        advice: "成功の鍵は、勢いだけで広げすぎず、根を張る場所を決めることです。信頼できる関係を丁寧に育てると運が安定します。",
+        yearAdvice: "寅年・卯年は天中殺年です。拡大よりも関係の見直し、学び直し、足場作りを優先するとよい時期です。"
+      },
+      {
+        name: "子丑天中殺",
+        branches: ["子", "丑"],
+        keyword: "始まり・蓄積・土台作り",
+        text: "子丑天中殺の人は、物事の始まりを感じ取る直感と、じっくり積み上げる粘り強さを持つタイプです。時間をかけて土台を作るほど強くなります。",
+        advice: "成功の鍵は、焦って結果を出そうとせず、準備と継続を大切にすることです。小さな習慣を整えると運が育ちます。",
+        yearAdvice: "子年・丑年は天中殺年です。新しい大勝負より、準備、整理、土台の作り直しに向く時期です。"
+      }
+    ];
+
     function readingFor(starName) {
       return TEN_STAR_READING[starName] || LIFE_STAGE_READING[starName] || { words: "", text: "" };
+    }
+
+    function tenchusatsuForChart(chart) {
+      return TENCHUSATSU_TYPES[Math.floor(chart.day.cycleIndex / 10)];
+    }
+
+    function isTenchusatsuLuck(tenchusatsu, luck) {
+      return tenchusatsu.branches.includes(luck.branch);
     }
 
     function balanceReading(chart) {
@@ -611,6 +671,36 @@
       `;
     }
 
+    function renderTenchusatsu(chart) {
+      const tenchusatsu = tenchusatsuForChart(chart);
+      const annualHits = chart.yearLucks.filter((luck) => isTenchusatsuLuck(tenchusatsu, luck));
+      const hitText = annualHits.length
+        ? annualHits.map((luck) => `${luck.year}年（${luck.label}）`).join("・")
+        : `${chart.targetYear - 5}〜${chart.targetYear + 5}年の表示範囲にはありません`;
+
+      $("#tenchusatsuPanel").innerHTML = `
+        <div class="panel-header">
+          <h2>天中殺</h2>
+          <span class="meta">日干支 ${chart.day.label} から算出</span>
+        </div>
+        <div class="tenchusatsu-layout">
+          <article class="tenchusatsu-main">
+            <div class="reading-meta">あなたの天中殺</div>
+            <h3>${tenchusatsu.name}</h3>
+            <strong>${tenchusatsu.keyword}</strong>
+            <p>${tenchusatsu.text}</p>
+            <p>${tenchusatsu.advice}</p>
+          </article>
+          <article class="tenchusatsu-years">
+            <div class="reading-meta">年運で天中殺に入る年</div>
+            <h3>${tenchusatsu.branches.join("・")}の年</h3>
+            <p>${hitText}</p>
+            <p>${tenchusatsu.yearAdvice}</p>
+          </article>
+        </div>
+      `;
+    }
+
     function renderTenStarReading(chart) {
       const positions = [
         { label: "頭 / 北", role: "目上・親", star: chart.yang.north },
@@ -859,6 +949,7 @@
     }
 
     function renderYearLuck(chart) {
+      const tenchusatsu = tenchusatsuForChart(chart);
       $("#yearLuckPanel").innerHTML = `
         <div class="panel-header">
           <h2>年運</h2>
@@ -868,13 +959,21 @@
           <table class="theme-table year-theme-table">
             <thead><tr><th>年</th><th>星</th><th>テーマ</th></tr></thead>
             <tbody>
-              ${chart.yearLucks.map((luck) => `
-                <tr>
+              ${chart.yearLucks.map((luck) => {
+                const isTenchu = isTenchusatsuLuck(tenchusatsu, luck);
+                return `
+                <tr class="${isTenchu ? "is-tenchusatsu-year" : ""}">
                   <td>${luck.year}</td>
-                  <td class="star-cell">${luckStars(luck)}</td>
-                  <td class="theme-cell">${themeForLuck(luck, "year")}</td>
+                  <td class="star-cell">
+                    ${luckStars(luck)}
+                    ${isTenchu ? `<span class="tenchu-badge">${tenchusatsu.name}</span>` : ""}
+                  </td>
+                  <td class="theme-cell">
+                    ${isTenchu ? `<div class="theme-stars">天中殺年</div>${tenchusatsu.yearAdvice}` : themeForLuck(luck, "year")}
+                  </td>
                 </tr>
-              `).join("")}
+              `;
+              }).join("")}
             </tbody>
           </table>
         </div>
@@ -909,6 +1008,7 @@
     function renderAll(chart) {
       renderSummary(chart);
       renderDayPillarReading(chart);
+      renderTenchusatsu(chart);
       renderYin(chart);
       renderYang(chart);
       renderBalance(chart);
