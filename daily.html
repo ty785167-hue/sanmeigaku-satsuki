@@ -1,0 +1,529 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>今日の算命学鑑定 by SATSUKI</title>
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <main class="app-shell">
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">Personal daily sanmei-gaku reading</p>
+        <h1>今日の算命学鑑定 by SATSUKI</h1>
+        <p class="subcopy">毎日、自分の命式とその日の干支から、今日の過ごし方を長文で鑑定します。</p>
+      </div>
+      <div class="formula-note">
+        生年月日と大運計算の性別区分はブラウザに保存されます。今日以外の日付も指定できます。
+      </div>
+    </header>
+
+    <form class="input-panel daily-input-panel" id="dailyForm">
+      <label class="field">
+        <span>名前</span>
+        <input id="profileName" type="text" placeholder="あなた">
+      </label>
+      <label class="field">
+        <span>生年月日</span>
+        <input id="birthDate" type="date" required>
+      </label>
+      <label class="field">
+        <span>大運計算</span>
+        <select id="gender">
+          <option value="male">男性式</option>
+          <option value="female">女性式</option>
+        </select>
+      </label>
+      <label class="field">
+        <span>鑑定する日</span>
+        <input id="targetDate" type="date" required>
+      </label>
+      <button type="submit">保存して鑑定</button>
+    </form>
+
+    <p class="error" id="errorBox"></p>
+
+    <section class="summary-grid daily-summary-grid" id="dailySummary"></section>
+
+    <section class="panel daily-focus-panel" id="dailyFocusPanel"></section>
+
+    <div class="workspace daily-workspace">
+      <div class="stack">
+        <section class="panel daily-guide-panel" id="dailyGuidePanel"></section>
+      </div>
+      <div class="stack">
+        <section class="panel" id="dailySidePanel"></section>
+        <section class="panel" id="dailyBalancePanel"></section>
+      </div>
+    </div>
+
+    <p class="disclaimer">
+      これは日々の内省と行動整理のための鑑定ページです。節入り時刻や蔵干の扱いは流派差があります。
+    </p>
+  </main>
+
+  <script src="./sanmeigaku.js"></script>
+  <script>
+    const $ = (selector) => document.querySelector(selector);
+    const api = window.SanmeiGaku;
+    const STORAGE_KEY = "satsuki-daily-profile";
+
+    const TEN_STAR_READING = {
+      貫索星: { words: "自立心・守り・継続", text: "自分の軸を守り、ひとつのことを粘り強く続ける星。今日はぶれない判断と継続が力になります。" },
+      石門星: { words: "仲間・協調・社交", text: "人と組み、場をまとめ、横のつながりを広げる星。今日は独り占めせず、共有するほど運が動きます。" },
+      鳳閣星: { words: "自然体・伝達・楽しみ", text: "無理なく表現し、明るく伝える星。今日は正しさより、分かりやすさと自然体が魅力になります。" },
+      調舒星: { words: "感性・個性・表現", text: "繊細な感受性と独自の美意識を持つ星。今日は違和感を無視せず、表現に変えることが大切です。" },
+      禄存星: { words: "愛情・奉仕・引力", text: "人を惹きつけ、面倒を見て、豊かさを循環させる星。今日は与えすぎと抱え込みの境目を見てください。" },
+      司禄星: { words: "蓄積・家庭・堅実", text: "日々の積み重ねで信用と財を作る星。今日は小さな整理、準備、管理が大きな安心につながります。" },
+      車騎星: { words: "行動・勝負・実行", text: "すぐ動き、戦い、結果を取りに行く星。今日は考えすぎる前に、まず一歩動くことで流れが開きます。" },
+      牽牛星: { words: "責任・品位・役割", text: "社会的な役割、名誉、秩序を重んじる星。今日は丁寧な対応と約束を守る姿勢が信頼を作ります。" },
+      龍高星: { words: "探求・改革・移動", text: "未知の世界を学び、古い枠を壊して進む星。今日は新しい視点、学び、移動が気分を変えてくれます。" },
+      玉堂星: { words: "知性・伝統・学問", text: "知識を吸収し、守り、教える星。今日は調べる、学ぶ、書く、確認することで判断が整います。" }
+    };
+
+    const LIFE_STAGE_READING = {
+      天報星: { stage: "胎児", words: "変化・可能性・柔軟性", text: "変化の中で可能性を開く星。今日は予定変更を敵にせず、柔らかく組み替えるほど運が動きます。" },
+      天印星: { stage: "赤ちゃん", words: "愛嬌・受容・守られる力", text: "人から助けられ、可愛がられる星。今日は素直に頼ること、受け取ることも開運になります。" },
+      天貴星: { stage: "児童", words: "学び・純粋さ・品性", text: "まっすぐ学び、正しさを大切にする星。今日は基本に戻るほど、迷いがほどけます。" },
+      天恍星: { stage: "少年", words: "憧れ・感性・魅せる力", text: "感性が華やかで、人を惹きつける星。今日は見せ方、装い、言葉の雰囲気を整えるとよい日です。" },
+      天南星: { stage: "青年", words: "勢い・反骨・挑戦", text: "前に出て挑む若いエネルギーの星。今日は遠慮しすぎず、言うべきことを言う勇気が鍵です。" },
+      天禄星: { stage: "壮年", words: "安定・現実力・守備", text: "現実的に積み上げ、守りを固める星。今日は派手さより、確実さと継続が運を支えます。" },
+      天将星: { stage: "頂点", words: "統率・強運・最大エネルギー", text: "十二大従星の中で最も強いエネルギーの星。今日は大きな役割を引き受けるほど力が出ます。" },
+      天堂星: { stage: "老人", words: "知恵・俯瞰・支える力", text: "経験を活かして静かに支える星。今日は一歩引いて見ることで、良い判断ができます。" },
+      天胡星: { stage: "病人", words: "直感・芸術・精神性", text: "鋭い感性と精神性を持つ星。今日は無理に走らず、感覚を整える時間が必要です。" },
+      天極星: { stage: "死人", words: "無心・直感・手放し", text: "執着を手放し、無心で受け取る星。今日は握りしめている予定や感情を少し緩めてください。" },
+      天庫星: { stage: "入墓", words: "探究・継承・蓄える力", text: "深く掘り下げ、守り、残す星。今日は記録、保存、研究、振り返りに向いています。" },
+      天馳星: { stage: "霊魂", words: "速度・瞬発・自由", text: "軽やかに動き、瞬間で力を出す星。今日は短時間集中と素早い切り替えが鍵です。" }
+    };
+
+    const DAY_STEM_READING = {
+      甲: { image: "大樹", words: "まっすぐ・成長・信念", text: "時間をかけてまっすぐ伸びる性質。今日は筋を通すほど自分らしさが戻ります。" },
+      乙: { image: "草花", words: "柔軟・調和・美意識", text: "しなやかに環境に合わせて伸びる性質。今日は柔らかい対応が強さになります。" },
+      丙: { image: "太陽", words: "明るさ・表現・存在感", text: "周囲を照らす性質。今日は隠れずに、自分の思いや魅力を表に出してください。" },
+      丁: { image: "灯火", words: "感性・集中・繊細さ", text: "ひとつを深く照らす性質。今日は集中できる環境を作ると感性が冴えます。" },
+      戊: { image: "山", words: "安定・包容力・信頼", text: "どっしり構えて人を受け止める性質。今日は焦らず土台を守ることが大切です。" },
+      己: { image: "田畑", words: "育成・現実感覚・面倒見", text: "人や物事を育てる性質。今日は目の前のことを丁寧に耕すほど成果になります。" },
+      庚: { image: "鉄・刀", words: "決断・行動・突破力", text: "鍛えられるほど強くなる性質。今日は決める、切る、動くことが運を開きます。" },
+      辛: { image: "宝石", words: "美意識・品位・完成度", text: "磨かれるほど輝く性質。今日は細部を整えることで魅力が出ます。" },
+      壬: { image: "海", words: "自由・知恵・スケール", text: "大きく流れる性質。今日は視野を広げ、ひとつの考えに閉じないことが大切です。" },
+      癸: { image: "雨・雫", words: "知性・観察・浸透力", text: "静かに浸透する性質。今日は急がず観察し、少しずつ進めるほど良い日です。" }
+    };
+
+    const DAY_BRANCH_READING = {
+      子: { words: "始まり・知恵・直感", text: "情報とひらめきを大切にすると流れが生まれます。" },
+      丑: { words: "蓄積・粘り・準備", text: "焦らず積み上げるほど後から成果になります。" },
+      寅: { words: "挑戦・成長・前進", text: "新しい挑戦が自分らしさを開くきっかけになります。" },
+      卯: { words: "調和・交流・広がり", text: "言葉、紹介、交流からチャンスが広がります。" },
+      辰: { words: "理想・変化・スケール", text: "夢を現実に落とすための整理が鍵になります。" },
+      巳: { words: "探究・情熱・集中", text: "専門性を深めるほど説得力が増します。" },
+      午: { words: "表現・勢い・華やかさ", text: "人前で動くこと、思いを出すことで運が動きます。" },
+      未: { words: "育成・情・まとめる力", text: "関係や環境を時間をかけて整えることが得意です。" },
+      申: { words: "工夫・実務・スピード", text: "改善と工夫を重ねることで結果につながります。" },
+      酉: { words: "美意識・完成・選別", text: "不要なものを削ぎ落とすほど魅力が際立ちます。" },
+      戌: { words: "信念・守り・責任", text: "責任を引き受ける場面で信頼が高まります。" },
+      亥: { words: "直感・深さ・精神性", text: "感覚を信じ、深く学ぶことで道が開きます。" }
+    };
+
+    const TEN_STAR_THEME = {
+      貫索星: "自分の軸を守り、ひとつの課題を継続する",
+      石門星: "人とのつながりを広げ、仲間と協力する",
+      鳳閣星: "自然体で楽しみ、言葉や発信で伝える",
+      調舒星: "感性を磨き、自分らしい個性を表現する",
+      禄存星: "人に与え、愛情や信用を循環させる",
+      司禄星: "生活、仕事、お金を丁寧に積み上げる",
+      車騎星: "すぐ動き、勝負所で結果を取りに行く",
+      牽牛星: "責任ある役割を果たし、信用を高める",
+      龍高星: "新しい世界を学び、変化を受け入れる",
+      玉堂星: "知識を深め、伝統や基本を大切にする"
+    };
+
+    const ELEMENT_BALANCE_READING = {
+      木: { meaning: "成長意欲と前へ伸びる力が強い命式です。", action: "優先順位を絞ると、理想が現実にまとまりやすくなります。" },
+      火: { meaning: "表現力と明るさが強く、人前で魅力が出やすい命式です。", action: "熱くなりすぎた時は、静かな休息で判断を冷ましてください。" },
+      土: { meaning: "安定感・責任感・面倒見が強く、人や場を支える命式です。", action: "抱え込みやすいので、小分けにして相談することが大切です。" },
+      金: { meaning: "決断力と美意識が強く、物事を整える命式です。", action: "厳しくなりすぎた時は、言葉を少し柔らかくしてください。" },
+      水: { meaning: "知性と柔軟性が強く、流れを読む命式です。", action: "考えすぎる時は、期限と行動を決めて前へ進めてください。" }
+    };
+
+    function toDateInput(date) {
+      const parts = api.toJstParts(date);
+      return `${parts.year}-${String(parts.month).padStart(2, "0")}-${String(parts.day).padStart(2, "0")}`;
+    }
+
+    function targetDateFromInput(value) {
+      const [year, month, day] = value.split("-").map(Number);
+      return api.makeJstDate(year, month, day, 12, 0);
+    }
+
+    function saveProfile() {
+      const profile = {
+        name: $("#profileName").value.trim(),
+        birthDate: $("#birthDate").value,
+        gender: $("#gender").value
+      };
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(profile));
+      return profile;
+    }
+
+    function loadProfile() {
+      const now = new Date();
+      $("#targetDate").value = toDateInput(now);
+      try {
+        const profile = JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}");
+        if (profile.name) $("#profileName").value = profile.name;
+        if (profile.birthDate) $("#birthDate").value = profile.birthDate;
+        if (profile.gender) $("#gender").value = profile.gender;
+      } catch {
+        localStorage.removeItem(STORAGE_KEY);
+      }
+    }
+
+    function luckFromPillar(chart, pillar) {
+      return {
+        ...pillar,
+        tenStar: api.tenStar(chart.day.stem, pillar.stem),
+        lifeStar: api.lifeStar(chart.day.stem, pillar.branch)
+      };
+    }
+
+    function activeBigLuck(chart, targetDate) {
+      const age = Math.max(0, (targetDate - chart.birthDate) / (365.2425 * 24 * 60 * 60 * 1000));
+      return chart.bigLuck.find((luck) => age >= luck.startAge && age < luck.endAge) || chart.bigLuck[0];
+    }
+
+    function balanceReading(chart) {
+      const entries = Object.entries(chart.balance);
+      const max = Math.max(...entries.map(([, value]) => value));
+      const strongest = entries.filter(([, value]) => value === max).map(([element]) => element);
+      const main = strongest[0];
+      if (strongest.length > 1) {
+        return {
+          title: `強い五行：${strongest.join("・")}`,
+          meaning: `${strongest.join("・")}が強めに出ています。場面によって複数の魅力が前に出ます。`,
+          action: "疲れやすい場面を観察し、予定を詰めすぎないことが対策です。"
+        };
+      }
+      return {
+        title: `強い五行：${main}`,
+        meaning: ELEMENT_BALANCE_READING[main].meaning,
+        action: ELEMENT_BALANCE_READING[main].action
+      };
+    }
+
+    function bigLuckCycle(chart) {
+      const cycleAge = Math.max(1, Math.floor(chart.startAge));
+      return {
+        age: cycleAge,
+        label: `${cycleAge}年運`
+      };
+    }
+
+    function dailyContext() {
+      const profile = saveProfile();
+      if (!profile.birthDate) throw new Error("生年月日を入力してください。");
+      const targetDate = targetDateFromInput($("#targetDate").value);
+      const targetParts = api.toJstParts(targetDate);
+      const chart = api.calculateNatal({
+        dateValue: profile.birthDate,
+        gender: profile.gender,
+        targetYear: targetParts.year
+      });
+      const day = luckFromPillar(chart, api.dayPillarForDate(targetDate));
+      const month = luckFromPillar(chart, api.monthPillarForDate(targetDate));
+      const year = luckFromPillar(chart, api.yearPillarForDate(targetDate));
+      const big = activeBigLuck(chart, targetDate);
+      const cycle = bigLuckCycle(chart);
+      return {
+        profile,
+        name: profile.name || "あなた",
+        targetDate,
+        targetParts,
+        chart,
+        day,
+        month,
+        year,
+        big,
+        cycle,
+        balance: balanceReading(chart),
+        dayStem: DAY_STEM_READING[chart.day.stem],
+        dayBranch: DAY_BRANCH_READING[chart.day.branch],
+        todayTen: TEN_STAR_READING[day.tenStar],
+        todayLife: LIFE_STAGE_READING[day.lifeStar.name],
+        monthTen: TEN_STAR_READING[month.tenStar],
+        monthLife: LIFE_STAGE_READING[month.lifeStar.name],
+        yearTen: TEN_STAR_READING[year.tenStar],
+        bigTen: TEN_STAR_READING[big.tenStar],
+        centerTen: TEN_STAR_READING[chart.yang.center],
+        eastTen: TEN_STAR_READING[chart.yang.east],
+        westTen: TEN_STAR_READING[chart.yang.west],
+        southTen: TEN_STAR_READING[chart.yang.south],
+        northTen: TEN_STAR_READING[chart.yang.north],
+        earlyLife: LIFE_STAGE_READING[chart.yang.early.name],
+        middleLife: LIFE_STAGE_READING[chart.yang.middle.name],
+        laterLife: LIFE_STAGE_READING[chart.yang.later.name]
+      };
+    }
+
+    function guideSection(title, paragraphs) {
+      return `
+        <section class="guide-section">
+          <h3>${title}</h3>
+          ${paragraphs.map((text) => `<p>${text}</p>`).join("")}
+        </section>
+      `;
+    }
+
+    function makeDailyGuide(ctx) {
+      const dateText = api.formatJst(ctx.targetDate, false);
+      const sections = [
+        guideSection("今日の全体テーマ", [
+          `${ctx.name}さんの${dateText}は、日運に${ctx.day.tenStar}と${ctx.day.lifeStar.name}が巡る日です。${ctx.day.tenStar}は「${ctx.todayTen.words}」を表し、${ctx.day.lifeStar.name}は「${ctx.todayLife.words}」の質を持ちます。今日の中心テーマは、「${TEN_STAR_THEME[ctx.day.tenStar]}」ことです。大きく運を変えようとするより、今日の中でこのテーマに沿った行動をひとつ選ぶことが開運になります。`,
+          `あなたの本質は日干${ctx.chart.day.stem}、イメージでは「${ctx.dayStem.image}」です。${ctx.dayStem.text} 日支${ctx.chart.day.branch}には「${ctx.dayBranch.words}」があり、${ctx.dayBranch.text} 今日の運勢を見る時は、その人らしい反応を土台にして、日運の星をどう使うかを見ると現実的です。`,
+          `今日は、結果そのものより「どんな気で動いたか」が大切です。急いで成果を出そうとすると、日運の細かなサインを見落とします。今日の星が求めているのは、${ctx.todayTen.words}を日常の中で使い、${ctx.todayLife.words}を意識しながら、必要なことを丁寧に選ぶことです。`
+        ]),
+        guideSection("朝の使い方", [
+          `朝は、今日の主導権を取り戻す時間です。起きてすぐに予定や通知に飲まれると、今日の星を自分で使う前に外側へ引っ張られます。まずは今日やることを3つだけ書いてください。そのうち1つは、日運のテーマである「${TEN_STAR_THEME[ctx.day.tenStar]}」に直接つながるものにします。`,
+          `朝の判断では、完璧な予定表を作るより、今日の流れをひとことで決めるほうが効果的です。たとえば「整える日」「伝える日」「動く日」「休ませる日」のように、今日の方向性を短く決めてください。短い言葉は一日の途中で迷った時の軸になります。`,
+          `もし朝から気分が重い場合は、予定を減らすことから始めてください。日運が強く出る日は、やる気が出る時もあれば、逆に内側が敏感になる時もあります。気分が乗らないことを悪いと決めず、今日の器に合わせて予定を組み直すことが大切です。`
+        ]),
+        guideSection("仕事・作業の進め方", [
+          `仕事や作業では、${ctx.day.tenStar}の性質を活かしてください。${ctx.todayTen.text} 今日の仕事は、量をこなすだけでなく、「何を中心に置いて進めるか」を決めることで質が上がります。すべてに同じ力を入れるのではなく、今日の星に合う作業へエネルギーを集めてください。`,
+          `大運では${ctx.big.tenStar}が背景にあり、長期的には「${ctx.bigTen.words}」が効いています。今日だけを見ると小さな一日ですが、実際には今の10年運の中の一日です。今日の行動が、長期の流れのどこに積み上がるのかを意識すると、雑な選択が減ります。`,
+          `年運は${ctx.year.tenStar}、月運は${ctx.month.tenStar}です。年のテーマは大きな空気、月のテーマは今月の課題、日運は今日の使い方です。今日は日運の${ctx.day.tenStar}を優先しつつ、月運の${ctx.month.tenStar}が示す「${TEN_STAR_THEME[ctx.month.tenStar]}」も忘れないでください。`
+        ]),
+        guideSection("人間関係のポイント", [
+          `人間関係では、陽占の東にある${ctx.chart.yang.east}が社会や友人との関わり方を示します。ここには「${ctx.eastTen.words}」の質があります。${ctx.eastTen.text} 今日の人間関係では、このもともとの社会性に、日運の${ctx.day.tenStar}が重なります。`,
+          `今日は、人との会話で「すぐ反応する」より「一度受け取る」ことを意識してください。日運の星によっては、言葉が強く出たり、相手の感情を受けすぎたりしやすくなります。返事を急がず、短く確認することで誤解を減らせます。`,
+          `近い関係では、西の${ctx.chart.yang.west}も大切です。${ctx.westTen.text} 家族、恋人、近い友人の前では、外で見せる顔より本音が出ます。今日疲れを感じたら、近い人に全部ぶつける前に、自分の状態を短く言葉にしてください。`
+        ]),
+        guideSection("お金と生活の整え方", [
+          `お金や生活では、五行バランスを見ると今日の対策が立てやすくなります。${ctx.balance.title}。${ctx.balance.meaning} この性質は才能ですが、使いすぎると疲れや偏りにもなります。今日の対策は、${ctx.balance.action}`,
+          `買い物や契約では、勢いだけで決めないでください。日運の勢いがある日は、その場の気分で欲しくなるものが増えます。今日必要なもの、今月中に必要なもの、今は欲しいだけのものを分けると、あとで後悔しにくくなります。`,
+          `生活面では、ひとつだけ整える場所を決めてください。財布、机、バッグ、予定表、冷蔵庫、スマホのメモなど、範囲は小さくて大丈夫です。今日の開運は大掃除ではなく、日々使う場所をひとつ整えることです。`
+        ]),
+        guideSection("心と体の注意点", [
+          `心の中心には、陽占中央の${ctx.chart.yang.center}があります。これは自分の価値観や内側の反応に関わる星で、「${ctx.centerTen.words}」の質を持ちます。${ctx.centerTen.text} 今日、自分の中心からずれた予定を入れすぎると、思った以上に疲れる可能性があります。`,
+          `体の面では、無理に頑張るより、こまめに気を抜くほうが合います。今日の${ctx.day.lifeStar.name}は「${ctx.todayLife.words}」の質を持つため、集中と休憩の切り替えが大切です。長時間同じ姿勢で粘るより、短い休憩を挟むことで運の流れが戻ります。`,
+          `気持ちが乱れた時は、今日の判断を明日に持ち越しても構いません。日運は一日の気なので、夜になると見え方が変わることがあります。重要な決断ほど、焦って今日中に決めようとせず、体調と気持ちが整った状態で見直してください。`
+        ]),
+        guideSection("今日の開運行動", [
+          `今日の開運行動は、日運のテーマを小さく実行することです。「${TEN_STAR_THEME[ctx.day.tenStar]}」を、仕事、人間関係、生活のどこかひとつに入れてください。大きな挑戦でなくて構いません。小さくても星に沿った行動をすると、一日の流れが自分のものになります。`,
+          `午前中におすすめなのは、今日の優先順位を決めることです。午後におすすめなのは、人との確認や修正です。夜におすすめなのは、今日できたことをひとつ書くことです。この3つだけでも、今日の気をかなり整えて使えます。`,
+          `もし時間がない日なら、深呼吸して「今日は何を大切にする日か」を一度だけ確認してください。それだけでも、流される一日から、自分で選ぶ一日に変わります。算命学の鑑定は、特別なことをするためだけでなく、日常の選択を少し丁寧にするために使えます。`
+        ]),
+        guideSection("避けたいこと", [
+          `今日は、疲れている状態で大きな約束をしないことが大切です。日運の星が強く出ると、その場ではできる気がしても、あとで重くなることがあります。返事を急がされた時は「確認してから返事します」と一度置いてください。`,
+          `また、他人のペースに合わせすぎることにも注意です。今日の星はあなたに特定の使い方を求めています。人の期待に応えることは大切ですが、それで自分の一日が空っぽになるなら調整が必要です。`,
+          `避けたいもうひとつのことは、結果だけで自分を判断することです。今日は、結果よりも使った気の質を見てください。少しでも星のテーマに沿って動けたなら、それは今日の運を使えたということです。`
+        ]),
+        guideSection("今日の長文メッセージ", [
+          `${ctx.name}さんにとって今日は、日干支${ctx.chart.day.label}の本質を土台に、日運${ctx.day.tenStar}と${ctx.day.lifeStar.name}を使う日です。あなたの中には${ctx.dayStem.image}の性質があり、${ctx.dayStem.words}という力があります。そこに日支${ctx.chart.day.branch}の${ctx.dayBranch.words}が重なっています。つまり、今日の運勢は外から急に来るものというより、もともとの自分の使い方を今日の星に合わせて調整するものです。`,
+          `今日うまくいく時は、無理に背伸びしている時ではありません。自分の自然な反応を大切にしながら、必要な場面で${ctx.todayTen.words}を使えている時です。たとえば、言うべきことを言う、整えるべきものを整える、動くべきところで動く、休むべきところで休む。そうした小さな選択が、今日の運を実際に動かします。`,
+          `今日は、完璧な日を目指さなくて大丈夫です。むしろ、途中で乱れた時にどう戻るかが大切です。予定が崩れたら組み直す。感情が揺れたら一度離れる。人に頼られすぎたら境界線を引く。これらは全部、運を逃す行動ではなく、運を整える行動です。`
+        ]),
+        guideSection("時間帯別の過ごし方", [
+          `朝は、自分の軸を作る時間です。今日の予定を全部見て、最も大切なことをひとつ選んでください。午前中はそのひとつに少しでも手をつけると、一日の流れが作りやすくなります。`,
+          `昼から夕方は、人や予定の影響を受けやすい時間です。ここでは柔軟さが大切になります。予定が変わっても、それを悪い流れと決めず、今日の星が調整を求めていると見てください。`,
+          `夜は、回収と整理の時間です。今日できたこと、疲れたこと、明日に回すことを分けてください。寝る前に反省を増やしすぎず、今日の自分が使えた力をひとつ認めると、明日の運へきれいにつながります。`
+        ]),
+        guideSection("午前中の具体的な動き", [
+          `午前中は、今日の気を最初に形にする時間です。ここで何となく過ごしてしまうと、午後から外側の予定や人の都合に流されやすくなります。まず、今日のテーマである「${TEN_STAR_THEME[ctx.day.tenStar]}」に関係する行動をひとつだけ選んでください。メールを1本送る、資料を1ページ直す、予定を1つ減らす、机の上を整える。その程度で十分です。`,
+          `午前中に大切なのは、完璧なスタートではなく、今日の星に合ったスタートです。${ctx.day.tenStar}の日は、${ctx.todayTen.words}の性質が出ます。朝のうちにこの性質を少しでも使うと、午後の判断が楽になります。反対に、朝から無関係な用事に追われると、今日の流れを取り戻すのに時間がかかります。`,
+          `もし午前中に予定が崩れた場合は、そこで一日を諦めないでください。日運は一日の中でも何度も立て直せます。崩れたら、いったん深呼吸して、今日のテーマに戻る小さな行動をひとつ入れてください。それだけで、流れはまた自分の手元へ戻ります。`
+        ]),
+        guideSection("午後の具体的な動き", [
+          `午後は、人や現実との調整が起こりやすい時間です。午前中に決めたことがそのまま進むとは限りません。連絡、変更、依頼、確認、予定外の作業が入ることもあります。ここで大切なのは、予定変更を運の邪魔と見ないことです。今日の${ctx.day.lifeStar.name}は「${ctx.todayLife.words}」を持つため、変化や調整の中でこそ見えるものがあります。`,
+          `午後の開運行動は、確認と修正です。誰かに任せていること、自分が返事を待っていること、曖昧なまま進んでいることがあれば、短く確認してください。確認は相手を疑うためではなく、流れを整えるための行動です。今日のうちに小さなズレを直しておくと、明日以降の負担が減ります。`,
+          `午後に疲れが出たら、無理に集中を続けるより、作業の種類を変えてください。考える仕事から手を動かす仕事へ、文章から整理へ、人との会話からひとりの作業へ。日運を使うには、同じ力を出し続けるより、気の向きを切り替えることが大切です。`
+        ]),
+        guideSection("夜の整え方", [
+          `夜は、今日の運を回収する時間です。今日起きたことをすべて評価しようとすると疲れるので、見るポイントを3つに絞ってください。今日うまく使えた星、今日疲れた場面、明日に渡すこと。この3つだけで十分です。`,
+          `今日うまく使えた星とは、${ctx.day.tenStar}の「${ctx.todayTen.words}」が出た場面です。たとえ小さくても構いません。短く伝えられた、踏みとどまれた、整理できた、頼れた、休めた。そういう小さな行動を見つけると、鑑定がただの読み物ではなく、自分の行動記録になります。`,
+          `寝る前には、明日へ持ち越すものを決めてください。全部を今日中に終わらせる必要はありません。むしろ、終わらないものを安全に置く力が大切です。メモに残す、カレンダーに入れる、人に一言伝える。これで今日の気はきれいに閉じやすくなります。`
+        ]),
+        guideSection("決断と判断", [
+          `今日、何かを決める場面があるなら、まず「今日決めるべきこと」と「明日以降でもよいこと」を分けてください。日運は一日の気なので、今日の勢いが良い形で働くこともあれば、感情が強く出ることもあります。すぐに決めたほうがよいものと、少し寝かせたほうがよいものを見分けることが大切です。`,
+          `判断の基準は、今日のテーマに合っているかどうかです。${TEN_STAR_THEME[ctx.day.tenStar]}ことにつながる選択なら、多少面倒でもやる意味があります。逆に、焦りや見栄だけで動く選択なら、今日は少し距離を置いたほうが安全です。`,
+          `迷った時は、体の反応を見てください。頭では正しいと思っていても、体が重くなる選択は負担が大きい可能性があります。反対に、少し怖くても呼吸が深くなる選択は、今日の星に合っていることがあります。算命学は理屈だけではなく、体感と合わせると日常で使いやすくなります。`
+        ]),
+        guideSection("今日の対人運を上げる言葉", [
+          `今日の対人運を上げる言葉は、「確認してもいいですか」「少し考えて返事します」「ここまではできます」の3つです。どれも強い言葉ではありませんが、自分と相手の境界線を整える力があります。`,
+          `特に、頼まれごとが来た時は「できます」と即答する前に、範囲を確認してください。今日の星が人のために動きやすい流れを作っている場合、気づかないうちに引き受けすぎることがあります。自分の時間と体力を守ることは、相手を大切にしないことではありません。`,
+          `人に何かを伝える時は、結論を短く、理由をやさしく添えるとよいです。今日の${ctx.day.tenStar}は良く出ると力になりますが、強く出すぎると相手に圧を感じさせることがあります。言葉の温度を少し下げるだけで、同じ内容でも届き方が変わります。`
+        ]),
+        guideSection("今日の仕事運を上げる順番", [
+          `仕事運を上げる順番は、整理、着手、共有、修正です。まず何をやるかを整理し、次に小さく着手し、途中で必要な人に共有し、最後に修正します。この順番を意識すると、今日の作業は滞りにくくなります。`,
+          `今日の星は、いきなり大きな完成を求めているわけではありません。むしろ、小さく始めて現実に合わせて変えるほうが合っています。完璧な計画に時間を使いすぎるより、10分でも手を動かしたほうが運が動きます。`,
+          `仕事で詰まったら、「これは考える問題か、確認する問題か、手を動かす問題か」と分けてください。考える問題を人に確認しても進まないし、確認すべき問題をひとりで考えても進みません。問題の種類を分けるだけで、今日の時間の使い方が変わります。`
+        ]),
+        guideSection("今日の疲れを減らす工夫", [
+          `疲れを減らすには、最初から全部に全力を出さないことです。今日の運勢をよく使う人は、力を出すところと抜くところを知っています。大切な予定の前後には、できれば10分の余白を作ってください。余白があるだけで、気持ちの乱れが次の予定へ移りにくくなります。`,
+          `また、情報を入れすぎないことも大切です。日運が敏感に働く日は、ニュース、SNS、人の言葉、通知が思った以上に心へ入ってきます。疲れたら、情報を減らしてください。静かな時間は、今日の運を整えるための立派な行動です。`,
+          `体の疲れには、軽い動きが合います。激しい運動でなくて構いません。肩を回す、歩く、水を飲む、湯船に入る、深呼吸する。今日の星を長く使うには、体に溜まった気を少しずつ流すことが大切です。`
+        ]),
+        guideSection("今日の振り返りノート", [
+          `今日の終わりに、3つだけ書いてください。1つ目は「今日できたこと」。2つ目は「今日疲れたこと」。3つ目は「明日少し楽にするために減らすこと」です。反省を長く書く必要はありません。短い記録のほうが続きます。`,
+          `できたことには、結果だけでなく行動を書いてください。返事をした、休めた、断れた、確認できた、整えた、手をつけた。こうした行動は小さく見えても、日運を使った証拠です。`,
+          `明日少し楽にするために減らすことは、予定でも、情報でも、心配でも構いません。今日の学びを明日に渡すことで、日運は一日で終わらず、生活の流れとして積み重なっていきます。`
+        ]),
+        guideSection("恋愛・身近な人との運勢", [
+          `恋愛や身近な人との関係では、相手にどう見せるかより、自分がどれだけ自然体でいられるかが大切です。今日は${ctx.day.tenStar}の日なので、関係の中でも「${ctx.todayTen.words}」の質が出やすくなります。良く出ると魅力になりますが、疲れている時は同じ星が不器用に出ることもあります。`,
+          `近い人には、説明を省略しすぎないでください。分かってくれるはず、察してくれるはず、という期待が強くなると、相手との温度差が出ます。今日は短くてもいいので、自分の状態を言葉にすることが関係を守ります。「今日は少し疲れている」「これは嬉しかった」「これは少し待ってほしい」その程度で十分です。`,
+          `もし相手との間に小さな違和感があるなら、今日中に結論を出そうとしなくて大丈夫です。日運は一日の波なので、感情が強く出ている時に決めると極端になりやすいです。今日は関係を壊すための日ではなく、関係の扱い方を整える日として使ってください。`
+        ]),
+        guideSection("学び・発信・創作の運勢", [
+          `学びや発信では、南の${ctx.chart.yang.south}がヒントになります。南は表現、伝達、未来へ向けた出し方を示します。あなたの南には${ctx.chart.yang.south}があり、「${ctx.southTen.words}」の質が出ます。今日は、頭の中だけで考えるより、少し外へ出すことで整理される日です。`,
+          `発信といっても、大きな投稿や完璧な文章である必要はありません。メモを書く、誰かに説明する、ノートにまとめる、音声で残す、短い下書きを作る。今日の星は、内側にあるものを少し形にした時に動きます。`,
+          `学びでは、広く浅くより、今日のテーマに関係するものをひとつ選んでください。あれもこれも吸収しようとすると、気が散ります。ひとつの資料、ひとつの本、ひとつの動画、ひとつの問いに絞ることで、学びが自分のものになります。`
+        ]),
+        guideSection("場づくりと空間の運勢", [
+          `今日は、いる場所の空気が気分に影響しやすい日です。部屋が散らかっている、机の上が重い、スマホの通知が多い、予定表が詰まっている。そうした小さな乱れが、思っている以上に心の判断へ影響します。`,
+          `おすすめは、5分だけ場所を整えることです。大掃除ではなく、今日よく使う場所をひとつだけ整えてください。机の上、財布、バッグ、スマホのメモ、玄関、寝る場所。今日の運を上げるには、広く片づけるより、毎日触れる一点を整えるほうが効果的です。`,
+          `空間を整えることは、心の中に余白を作ることでもあります。今日の${ctx.day.lifeStar.name}が持つ「${ctx.todayLife.words}」の流れを良くするには、気が詰まる場所を少し開けることが大切です。物をひとつ戻すだけでも、運の通り道は変わります。`
+        ]),
+        guideSection("今日の内省テーマ", [
+          `今日、自分に問いかけてほしいのは、「いま自分は何を大切にしたいのか」です。忙しい日ほど、この問いが流されるのを止めてくれます。今日の運勢は、外側の出来事に反応するだけではなく、自分の大切なものを思い出すことで使いやすくなります。`,
+          `もうひとつの問いは、「これは本当に今日やることか」です。今日やったほうがいいこと、今週でいいこと、今月でいいこと、人に任せていいことを分けてください。全部を今日に詰めると、どれも中途半端になります。日運は一日分の器なので、その器に合う量を選ぶことが大切です。`,
+          `最後の問いは、「今日の自分を少し楽にするなら何を減らすか」です。増やすことだけが開運ではありません。予定を減らす、通知を減らす、心配を減らす、言い訳を減らす。減らすことで、今日の星がきれいに使えることがあります。`
+        ]),
+        guideSection("今日の小さな成功条件", [
+          `今日の成功条件は、大きな結果を出すことではありません。日運のテーマに沿った行動をひとつ実行することです。${ctx.day.tenStar}の日なら、「${TEN_STAR_THEME[ctx.day.tenStar]}」に関わる行動がひとつでもできれば、今日の運は使えています。`,
+          `成功条件を小さくすることは、妥協ではありません。小さく決めるから実行できます。実行できるから自信が戻ります。自信が戻るから、次の行動が自然に出ます。今日の運勢は、この小さな循環を作ることが大切です。`,
+          `今日の終わりに、「完璧ではなかったけれど、ここは使えた」と言える部分を探してください。それが今日の成果です。算命学を毎日使う意味は、自分を責める材料を増やすことではなく、自分の扱い方を少しずつ上手にすることです。`
+        ]),
+        guideSection("明日に残すもの", [
+          `今日の最後には、明日に残すものを選んでください。未完了の仕事、返事、感情、アイデア、気づき。その全部を頭の中に置いたまま眠ると、休んでいるつもりでも気が休まりません。メモに書く、予定表に移す、誰かに送る、フォルダに入れる。形を与えてから休むことが大切です。`,
+          `明日に残すものは、悪いものではありません。今日の器に入りきらなかったものを、明日の器へ安全に渡すだけです。そう考えると、終わらなかったことへの罪悪感が減ります。日運は毎日変わるので、明日は明日の星で扱えばいいのです。`,
+          `今日の自分に必要なのは、すべてを完了させる力ではなく、きれいに区切る力です。区切れる人は、次の日にまた始められます。今日の鑑定の最後は、終えること、休むこと、明日へ渡すことまで含めて完成です。`
+        ]),
+        guideSection("今日のチェックリスト", [
+          `今日のチェックリストは5つです。ひとつ目は、今日のテーマを一言で言えるか。ふたつ目は、最優先の行動をひとつ選べたか。みっつ目は、人に確認すべきことを放置していないか。よっつ目は、休む時間を先に確保できているか。いつつ目は、夜に今日の自分を責めずに振り返れるか。`,
+          `この5つが全部できなくても問題ありません。大切なのは、今日の途中で思い出せることです。朝に見て、昼にひとつ確認し、夜にもう一度見る。それだけでも、日運を意識して過ごす感覚が身についていきます。`,
+          `毎日このページを開くなら、チェックリストは自分の変化を見る鏡になります。昨日はできなかったけれど今日はできた。今日は疲れていたから減らした。そうした小さな記録が、長い目で見ると自分だけの鑑定データになります。`
+        ]),
+        guideSection("SATSUKIからの今日の一言", [
+          `${ctx.name}さん、今日は自分の力を丁寧に使う日です。強く出ることだけが運を使うことではありません。止まる、選ぶ、断る、整える、頼る、休む。そうした静かな行動も、今日の星を立派に使っていることになります。`,
+          `今日の運勢を読む時に一番大切なのは、自分を急かさないことです。日運は、その日の自分を責めるためのものではなく、その日の自分を扱いやすくするためのものです。うまくいかない時間があっても、それを見直して戻れるなら、今日の鑑定はすでに役に立っています。`,
+          `最後に、今日のあなたに必要なのは、大きな正解より小さな納得です。自分で選んだと思える一日、自分の気を少し守れた一日、自分の本質を少し使えた一日。それが今日の開運です。無理に完璧を取りに行かず、今日の星と一緒に、できることから整えてください。`
+        ]),
+        guideSection("今日の締めくくり", [
+          `今日の一番の合言葉は、「${TEN_STAR_THEME[ctx.day.tenStar]}」です。そして、${ctx.day.lifeStar.name}の「${ctx.todayLife.words}」を忘れないこと。これを意識するだけで、今日という一日がただ過ぎる時間ではなく、自分を整える時間になります。`,
+          `算命学的に見る今日の運勢は、良い悪いを決めるものではありません。どの星をどう使えば、自分が自然に動けるかを知るものです。今日は、あなたの本質と日運が出会う一日です。無理に違う人にならず、今日の星に合う使い方をしてください。`,
+          `最後に、今日の開運ポイントは「自分の力を雑に使わないこと」です。誰かのために動く時も、自分の予定を進める時も、力の配分を意識してください。大切なものに力を残し、必要な場面で丁寧に使う。そうできた時、今日の運はあなたの味方になります。`
+        ])
+      ];
+      return sections.join("");
+    }
+
+    function renderSummary(ctx) {
+      $("#dailySummary").innerHTML = [
+        ["今日の日干支", ctx.day.label, `${api.formatJst(ctx.targetDate, false)} / ${ctx.day.number}番`],
+        ["今日の星", ctx.day.tenStar, `${ctx.day.lifeStar.name} ${ctx.day.lifeStar.energy}点`],
+        ["今月の星", ctx.month.tenStar, `${ctx.month.lifeStar.name} / ${api.formatJst(ctx.month.start, false)}から`],
+        ["大運", ctx.cycle.label, `${ctx.big.tenStar} / ${ctx.big.lifeStar.name}`]
+      ].map(([label, value, detail]) => `
+        <article class="summary-card">
+          <div class="label">${label}</div>
+          <div class="value">${value}</div>
+          <div class="detail">${detail}</div>
+        </article>
+      `).join("");
+    }
+
+    function renderFocus(ctx) {
+      $("#dailyFocusPanel").innerHTML = `
+        <div class="panel-header">
+          <h2>今日の一言鑑定</h2>
+          <span class="meta">${ctx.name}さん専用</span>
+        </div>
+        <div class="daily-focus">
+          <strong>${TEN_STAR_THEME[ctx.day.tenStar]}</strong>
+          <p>今日は${ctx.day.tenStar}と${ctx.day.lifeStar.name}の日。${ctx.todayTen.text} ${ctx.todayLife.text}</p>
+        </div>
+      `;
+    }
+
+    function renderSide(ctx) {
+      $("#dailySidePanel").innerHTML = `
+        <div class="panel-header">
+          <h2>今日の材料</h2>
+          <span class="meta">日・月・年・大運</span>
+        </div>
+        <div class="daily-pill-grid">
+          <div class="daily-pill"><span>本質</span><strong>${ctx.chart.day.label}</strong><p>${ctx.dayStem.image} / ${ctx.dayBranch.words}</p></div>
+          <div class="daily-pill"><span>日運</span><strong>${ctx.day.tenStar}</strong><p>${ctx.day.lifeStar.name} ${ctx.day.lifeStar.energy}点</p></div>
+          <div class="daily-pill"><span>月運</span><strong>${ctx.month.tenStar}</strong><p>${ctx.month.lifeStar.name}</p></div>
+          <div class="daily-pill"><span>年運</span><strong>${ctx.year.tenStar}</strong><p>${ctx.year.lifeStar.name}</p></div>
+          <div class="daily-pill"><span>大運</span><strong>${ctx.big.tenStar}</strong><p>${ctx.big.lifeStar.name}</p></div>
+        </div>
+      `;
+    }
+
+    function renderBalance(ctx) {
+      const max = Math.max(...Object.values(ctx.chart.balance), 1);
+      $("#dailyBalancePanel").innerHTML = `
+        <div class="panel-header">
+          <h2>五行バランス</h2>
+          <span class="meta">命式の土台</span>
+        </div>
+        <div class="balance">
+          ${api.ELEMENT_ORDER.map((element) => `
+            <div class="bar-row">
+              <strong>${element}</strong>
+              <div class="bar-track"><div class="bar element-${element}" style="width:${ctx.chart.balance[element] / max * 100}%"></div></div>
+              <span>${ctx.chart.balance[element]}</span>
+            </div>
+          `).join("")}
+        </div>
+        <div class="balance-reading">
+          <div class="balance-reading-title">${ctx.balance.title}</div>
+          <p><strong>意味：</strong>${ctx.balance.meaning}</p>
+          <p><strong>対策：</strong>${ctx.balance.action}</p>
+        </div>
+      `;
+    }
+
+    function renderGuide(ctx) {
+      const guide = makeDailyGuide(ctx);
+      const plainLength = guide.replace(/<[^>]+>/g, "").replace(/\s+/g, "").length;
+      $("#dailyGuidePanel").innerHTML = `
+        <div class="panel-header">
+          <h2>今日の運勢 総合鑑定</h2>
+          <span class="meta">約${plainLength.toLocaleString()}文字</span>
+        </div>
+        <div class="monthly-guide-lead">
+          <strong>${ctx.day.tenStar} / ${ctx.day.lifeStar.name}</strong>
+          <span>${api.formatJst(ctx.targetDate, false)}の日運をもとに鑑定しています。</span>
+        </div>
+        <div class="guide-body">${guide}</div>
+      `;
+    }
+
+    function renderAll() {
+      const errorBox = $("#errorBox");
+      errorBox.classList.remove("is-visible");
+      try {
+        const ctx = dailyContext();
+        renderSummary(ctx);
+        renderFocus(ctx);
+        renderSide(ctx);
+        renderBalance(ctx);
+        renderGuide(ctx);
+      } catch (error) {
+        errorBox.textContent = error.message;
+        errorBox.classList.add("is-visible");
+      }
+    }
+
+    $("#dailyForm").addEventListener("submit", (event) => {
+      event.preventDefault();
+      renderAll();
+    });
+    $("#targetDate").addEventListener("change", renderAll);
+
+    loadProfile();
+    if ($("#birthDate").value) renderAll();
+  </script>
+</body>
+</html>
