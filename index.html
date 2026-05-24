@@ -5,6 +5,105 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>算命学鑑定 by SATSUKI</title>
   <link rel="stylesheet" href="./styles.css">
+  <style>
+  .phase-panel .phase-control {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    flex-wrap: wrap;
+    margin: 12px 0 18px;
+  }
+
+  .phase-panel select {
+    min-width: 220px;
+    padding: 10px 12px;
+    border: 1px solid rgba(15, 23, 42, .18);
+    border-radius: 10px;
+    background: #fff;
+    font-size: 15px;
+  }
+
+  .phase-detail-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 14px;
+  }
+
+  .phase-card {
+    border: 1px solid rgba(15, 23, 42, .12);
+    border-radius: 16px;
+    padding: 14px;
+    background: rgba(255, 255, 255, .72);
+  }
+
+  .phase-card h3 {
+    margin: 0 0 6px;
+    font-size: 16px;
+  }
+
+  .phase-card .phase-area {
+    font-size: 12px;
+    color: #64748b;
+    margin-bottom: 10px;
+    line-height: 1.6;
+  }
+
+  .phase-badges {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin: 8px 0 10px;
+  }
+
+  .phase-badge {
+    display: inline-flex;
+    align-items: center;
+    border-radius: 999px;
+    padding: 4px 9px;
+    font-size: 12px;
+    font-weight: 700;
+    background: #e0f2fe;
+    color: #0369a1;
+  }
+
+  .phase-badge.warn {
+    background: #fee2e2;
+    color: #b91c1c;
+  }
+
+  .phase-badge.move {
+    background: #fef3c7;
+    color: #92400e;
+  }
+
+  .phase-badge.good {
+    background: #dcfce7;
+    color: #166534;
+  }
+
+  .phase-card p {
+    margin: 8px 0 0;
+    line-height: 1.7;
+  }
+
+  .phase-table .phase-mini {
+    display: grid;
+    gap: 4px;
+    font-size: 12px;
+    line-height: 1.45;
+  }
+
+  .phase-table .phase-mini strong {
+    display: inline-block;
+    min-width: 42px;
+  }
+
+  @media (max-width: 860px) {
+    .phase-detail-grid {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>
 </head>
 <body>
   <main class="app-shell">
@@ -59,6 +158,7 @@
       <section class="panel" id="bigLuckPanel"></section>
       <section class="panel" id="yearLuckPanel"></section>
       <section class="panel" id="monthLuckPanel"></section>
+      <section class="panel phase-panel" id="phasePanel"></section>
       <section class="panel monthly-guide-panel" id="monthlyGuidePanel"></section>
     </div>
 
@@ -358,6 +458,416 @@
         yearAdvice: "子年・丑年は天中殺年です。新しい大勝負より、準備、整理、土台の作り直しに向く時期です。"
       }
     ];
+    const STEM_ELEMENT_MAP = {
+  甲: "木", 乙: "木",
+  丙: "火", 丁: "火",
+  戊: "土", 己: "土",
+  庚: "金", 辛: "金",
+  壬: "水", 癸: "水"
+};
+
+const CONTROL_ELEMENT = {
+  木: "土",
+  土: "水",
+  水: "火",
+  火: "金",
+  金: "木"
+};
+
+const STEM_COMBINE_PAIRS = [
+  ["甲", "己"],
+  ["乙", "庚"],
+  ["丙", "辛"],
+  ["丁", "壬"],
+  ["戊", "癸"]
+];
+
+const BRANCH_RELATION_PAIRS = {
+  支合: [
+    ["子", "丑"],
+    ["寅", "亥"],
+    ["卯", "戌"],
+    ["辰", "酉"],
+    ["巳", "申"],
+    ["午", "未"]
+  ],
+  対冲: [
+    ["子", "午"],
+    ["丑", "未"],
+    ["寅", "申"],
+    ["卯", "酉"],
+    ["辰", "戌"],
+    ["巳", "亥"]
+  ],
+  害: [
+    ["子", "未"],
+    ["丑", "午"],
+    ["寅", "巳"],
+    ["卯", "辰"],
+    ["申", "亥"],
+    ["酉", "戌"]
+  ],
+  破: [
+    ["子", "酉"],
+    ["丑", "辰"],
+    ["寅", "亥"],
+    ["卯", "午"],
+    ["巳", "申"],
+    ["未", "戌"]
+  ],
+  半会: [
+    ["申", "子"], ["子", "辰"], ["申", "辰"],
+    ["亥", "卯"], ["卯", "未"], ["亥", "未"],
+    ["寅", "午"], ["午", "戌"], ["寅", "戌"],
+    ["巳", "酉"], ["酉", "丑"], ["巳", "丑"]
+  ]
+};
+
+const SANKEI_GROUPS = {
+  庫気刑: ["丑", "未", "戌"],
+  生貴刑: ["寅", "巳", "申"],
+  旺気刑: ["子", "卯"]
+};
+
+const SELF_PUNISH_BRANCHES = ["辰", "午", "酉", "亥"];
+
+const PHASE_READING = {
+  支合: {
+    tone: "good",
+    short: "まとまる・結びつく",
+    text: "穏やかにまとまりやすい関係です。人や物事が自然に結びつき、調整や協力が進みやすくなります。"
+  },
+  半会: {
+    tone: "good",
+    short: "広がる・融合する",
+    text: "物事が広がりやすく、別々だった要素がまとまりやすい関係です。企画、発信、行動を形にしやすい流れです。"
+  },
+  大半会: {
+    tone: "good",
+    short: "強く広がる・現実化",
+    text: "半会に天干の同質性が加わるため、広がりが強く出ます。現実化、拡大、形にする力が強まります。"
+  },
+  対冲: {
+    tone: "move",
+    short: "ぶつかる・切り替わる",
+    text: "ぶつかって動く関係です。予定変更、方向転換、関係性の見直しが起きやすく、古い流れを切り替える作用があります。"
+  },
+  天剋地冲: {
+    tone: "warn",
+    short: "大きな衝突・転換",
+    text: "天干も地支も強くぶつかる関係です。大きな変更、衝突、分離、方向転換が起きやすいため、勢いだけの決断は慎重に扱います。"
+  },
+  納音: {
+    tone: "move",
+    short: "同質のまま反転する",
+    text: "同じ天干で地支が冲する関係です。同じテーマの中で方向が反転しやすく、内側の矛盾や切り替えが表面化しやすくなります。"
+  },
+  害: {
+    tone: "warn",
+    short: "違和感・内側のズレ",
+    text: "表面上は進んでいても、内側に違和感やズレが出やすい関係です。無理に押し切らず、体調や気持ちのサインを見ます。"
+  },
+  破: {
+    tone: "move",
+    short: "小さな破れ・予定変更",
+    text: "小さな破れや予定変更が出やすい関係です。大きな崩壊というより、細かなズレを早めに修正する意識が大切です。"
+  },
+  庫気刑: {
+    tone: "warn",
+    short: "蓄積した違和感・上下関係",
+    text: "溜まっていたものが表に出やすい刑です。上司、先生、師匠、古い関係、過去からの課題がテーマになりやすいです。"
+  },
+  生貴刑: {
+    tone: "warn",
+    short: "勢いの摩擦・動きすぎ注意",
+    text: "勢いが強くなり、動きながら摩擦が起きやすい刑です。焦り、衝動、急な判断には注意が必要です。"
+  },
+  旺気刑: {
+    tone: "warn",
+    short: "こだわり・感情の摩擦",
+    text: "気持ちやこだわりが強く出やすい刑です。正しさを押し通すより、相手との温度差を見ることが大切です。"
+  },
+  自刑: {
+    tone: "warn",
+    short: "自分の中で葛藤する",
+    text: "外側よりも、自分の中で考えすぎたり、同じテーマを反復しやすい関係です。結論を急がず整理に使うとよいです。"
+  },
+  干合: {
+    tone: "good",
+    short: "テーマが結びつく",
+    text: "天干同士が結びつく関係です。人との縁、役割、テーマの結びつきが起きやすくなります。"
+  }
+};
+
+const PILLAR_SCOPE = {
+  day: {
+    label: "日干支",
+    area: "自分・身体・本音・配偶者・身内・プライベート",
+    advice: "ここに位相法が出る時は、自分の体感、健康、近い関係に出やすいです。"
+  },
+  month: {
+    label: "月干支",
+    area: "仕事・社会・所属・現実活動・家系・目上",
+    advice: "ここに位相法が出る時は、仕事、所属、社会的な関係に出やすいです。"
+  },
+  year: {
+    label: "年干支",
+    area: "親・上司・先生・師匠・外部環境・世間",
+    advice: "ここに位相法が出る時は、目上、先生、外側の環境との関係に出やすいです。"
+  }
+};
+
+function hasUnorderedPair(pairs, a, b) {
+  return pairs.some(([x, y]) => (x === a && y === b) || (x === b && y === a));
+}
+
+function sameStem(a, b) {
+  return a === b;
+}
+
+function stemControls(a, b) {
+  const elementA = STEM_ELEMENT_MAP[a];
+  const elementB = STEM_ELEMENT_MAP[b];
+  return CONTROL_ELEMENT[elementA] === elementB;
+}
+
+function isStemControlRelation(a, b) {
+  return stemControls(a, b) || stemControls(b, a);
+}
+
+function isStemCombine(a, b) {
+  return hasUnorderedPair(STEM_COMBINE_PAIRS, a, b);
+}
+
+function isInSameGroup(group, a, b) {
+  return group.includes(a) && group.includes(b) && a !== b;
+}
+
+function natalPillars(chart) {
+  return [
+    { key: "day", ...PILLAR_SCOPE.day, pillar: chart.day },
+    { key: "month", ...PILLAR_SCOPE.month, pillar: chart.month },
+    { key: "year", ...PILLAR_SCOPE.year, pillar: chart.year }
+  ];
+}
+
+function phaseRelations(transit, natal) {
+  const relations = [];
+  const tStem = transit.stem;
+  const nStem = natal.stem;
+  const tBranch = transit.branch;
+  const nBranch = natal.branch;
+
+  const hasCh冲 = hasUnorderedPair(BRANCH_RELATION_PAIRS.対冲, tBranch, nBranch);
+  const hasHalf = hasUnorderedPair(BRANCH_RELATION_PAIRS.半会, tBranch, nBranch);
+
+  if (hasCh冲 && isStemControlRelation(tStem, nStem)) {
+    relations.push("天剋地冲");
+  }
+
+  if (hasCh冲 && sameStem(tStem, nStem)) {
+    relations.push("納音");
+  }
+
+  if (hasHalf && sameStem(tStem, nStem)) {
+    relations.push("大半会");
+  } else if (hasHalf) {
+    relations.push("半会");
+  }
+
+  if (hasUnorderedPair(BRANCH_RELATION_PAIRS.支合, tBranch, nBranch)) {
+    relations.push("支合");
+  }
+
+  if (hasCh冲) {
+    relations.push("対冲");
+  }
+
+  if (hasUnorderedPair(BRANCH_RELATION_PAIRS.害, tBranch, nBranch)) {
+    relations.push("害");
+  }
+
+  if (hasUnorderedPair(BRANCH_RELATION_PAIRS.破, tBranch, nBranch)) {
+    relations.push("破");
+  }
+
+  if (tBranch === nBranch && SELF_PUNISH_BRANCHES.includes(tBranch)) {
+    relations.push("自刑");
+  }
+
+  Object.entries(SANKEI_GROUPS).forEach(([name, group]) => {
+    if (isInSameGroup(group, tBranch, nBranch)) {
+      relations.push(name);
+    }
+  });
+
+  if (isStemCombine(tStem, nStem)) {
+    relations.push("干合");
+  }
+
+  return [...new Set(relations)];
+}
+
+function relationBadges(relations) {
+  if (!relations.length) {
+    return `<span class="phase-badge">通常</span>`;
+  }
+
+  return relations.map((name) => {
+    const reading = PHASE_READING[name] || { tone: "", short: "" };
+    return `<span class="phase-badge ${reading.tone || ""}">${name}</span>`;
+  }).join("");
+}
+
+function relationText(relations) {
+  if (!relations.length) {
+    return "大きな位相法は出ていません。通常運転で、星のテーマをそのまま使いやすい月です。";
+  }
+
+  return relations.map((name) => {
+    const reading = PHASE_READING[name];
+    return reading ? `【${name}】${reading.text}` : `【${name}】この関係が出ています。`;
+  }).join("");
+}
+
+function phaseScore(relations) {
+  if (!relations.length) return 0;
+  return relations.reduce((score, name) => {
+    if (["支合", "半会", "大半会", "干合"].includes(name)) return score + 1;
+    if (["対冲", "破", "納音"].includes(name)) return score + 2;
+    if (["害", "天剋地冲", "庫気刑", "生貴刑", "旺気刑", "自刑"].includes(name)) return score + 3;
+    return score + 1;
+  }, 0);
+}
+
+function phaseSummaryForLuck(chart, luck) {
+  return natalPillars(chart).map((item) => {
+    const relations = phaseRelations(luck, item.pillar);
+    return {
+      ...item,
+      relations,
+      score: phaseScore(relations)
+    };
+  });
+}
+
+function monthLabelForLuck(luck) {
+  const date = api.toJstParts(luck.start);
+  return `${date.year}年${date.month}月`;
+}
+
+function luckDateRange(luck) {
+  const start = api.formatJst(luck.start, false);
+  if (!luck.end) return `${start}〜次の節入り`;
+  const end = api.formatJst(new Date(luck.end.getTime() - 24 * 60 * 60 * 1000), false);
+  return `${start}〜${end}`;
+}
+
+function monthPhaseHeadline(chart, luck) {
+  const summaries = phaseSummaryForLuck(chart, luck);
+  const allRelations = summaries.flatMap((item) => item.relations);
+
+  if (isTenchusatsuLuck(tenchusatsuForChart(chart), luck)) {
+    return "月天中殺。大きな決断より、整理・観察・内面の調整を優先。";
+  }
+
+  if (allRelations.includes("天剋地冲")) {
+    return "大きな切り替え運。衝突や方向転換を、次の設計に変える月。";
+  }
+
+  if (allRelations.includes("庫気刑")) {
+    return "蓄積した違和感が出やすい月。目上・古い関係・責任範囲を見直す。";
+  }
+
+  if (allRelations.includes("対冲")) {
+    return "切り替え運。予定変更や分離を通じて、流れが変わりやすい月。";
+  }
+
+  if (allRelations.includes("大半会") || allRelations.includes("半会")) {
+    return "広がり運。企画・発信・人との連携を形にしやすい月。";
+  }
+
+  if (allRelations.includes("支合")) {
+    return "調整運。人や物事がまとまりやすく、関係を整える月。";
+  }
+
+  return "通常運。星のテーマをそのまま使い、日常を整える月。";
+}
+
+function renderPhasePanel(chart) {
+  const monthOptions = chart.monthLucks.map((luck, index) => {
+    const label = `${monthLabelForLuck(luck)} ${luck.label} ${luck.tenStar}/${luck.lifeStar.name}`;
+    return `<option value="${index}">${label}</option>`;
+  }).join("");
+
+  $("#phasePanel").innerHTML = `
+    <div class="panel-header">
+      <h2>位相法 月別詳細</h2>
+      <span class="meta">日干支・月干支・年干支への作用</span>
+    </div>
+    <p class="panel-note">
+      巡ってきた月運の干支が、宿命の「日干支・月干支・年干支」にどう作用するかを見ます。
+      日干支は自分や身体、月干支は仕事や社会、年干支は親・上司・先生・外部環境に出やすい場所です。
+    </p>
+    <div class="phase-control">
+      <label class="field">
+        <span>月を選択</span>
+        <select id="phaseMonthSelect">${monthOptions}</select>
+      </label>
+    </div>
+    <div id="phaseDetail"></div>
+  `;
+
+  const select = $("#phaseMonthSelect");
+
+  function updateDetail() {
+    const luck = chart.monthLucks[Number(select.value)];
+    const summaries = phaseSummaryForLuck(chart, luck);
+    const tenchusatsu = tenchusatsuForChart(chart);
+    const isTenchu = isTenchusatsuLuck(tenchusatsu, luck);
+
+    $("#phaseDetail").innerHTML = `
+      <div class="monthly-guide-lead">
+        <strong>${monthLabelForLuck(luck)}｜${luck.label}｜${luck.tenStar} / ${luck.lifeStar.name}</strong>
+        <span>${luckDateRange(luck)}</span>
+      </div>
+
+      <div class="balance-reading">
+        <div class="balance-reading-title">${monthPhaseHeadline(chart, luck)}</div>
+        <p>
+          ${isTenchu ? `この月は${tenchusatsu.name}の月天中殺です。大きく取りに行くより、整理・奉仕・学び・休息・内面調整に使うと安定します。` : themeForLuck(luck, "month")}
+        </p>
+      </div>
+
+      <div class="phase-detail-grid">
+        ${summaries.map((item) => `
+          <article class="phase-card">
+            <h3>${item.label}：${item.pillar.label}</h3>
+            <div class="phase-area">${item.area}</div>
+            <div class="phase-badges">${relationBadges(item.relations)}</div>
+            <p>${relationText(item.relations)}</p>
+            <p><strong>読み方：</strong>${item.advice}</p>
+          </article>
+        `).join("")}
+      </div>
+    `;
+  }
+
+  select.addEventListener("change", updateDetail);
+
+  const now = new Date();
+  const activeIndex = chart.monthLucks.findIndex((luck) => {
+    const start = luck.start.getTime();
+    const end = luck.end ? luck.end.getTime() : Infinity;
+    return now.getTime() >= start && now.getTime() < end;
+  });
+
+  if (activeIndex >= 0) {
+    select.value = String(activeIndex);
+  }
+
+  updateDetail();
+}
 
     function readingFor(starName) {
       return TEN_STAR_READING[starName] || LIFE_STAGE_READING[starName] || { words: "", text: "" };
@@ -980,43 +1490,86 @@
       `;
     }
 
-    function renderMonthLuck(chart) {
-      $("#monthLuckPanel").innerHTML = `
-        <div class="panel-header">
-          <h2>月運</h2>
-          <span class="meta">${chart.targetYear}年の節月</span>
-        </div>
-        <div class="table-wrap">
-          <table class="theme-table month-theme-table">
-            <thead><tr><th>日付</th><th>テーマ</th></tr></thead>
-            <tbody>
-              ${chart.monthLucks.map((luck) => `
-                <tr>
-                  <td>${api.formatJst(luck.start, false)}</td>
-                  <td class="theme-cell">
-                    <div class="theme-stars">${luck.tenStar} / ${luck.lifeStar.name}</div>
-                    ${themeForLuck(luck, "month")}
-                  </td>
-                </tr>
-              `).join("")}
-            </tbody>
-          </table>
-        </div>
-      `;
-    }
+   function renderMonthLuck(chart) {
+  const tenchusatsu = tenchusatsuForChart(chart);
 
-    function renderAll(chart) {
-      renderSummary(chart);
-      renderDayPillarReading(chart);
-      renderTenchusatsu(chart);
-      renderYin(chart);
-      renderYang(chart);
-      renderBalance(chart);
-      renderBigLuck(chart);
-      renderYearLuck(chart);
-      renderMonthLuck(chart);
-      renderMonthlyGuide(chart);
-    }
+  $("#monthLuckPanel").innerHTML = `
+    <div class="panel-header">
+      <h2>月運</h2>
+      <span class="meta">${chart.targetYear}年の節月 / 位相法つき</span>
+    </div>
+    <div class="table-wrap">
+      <table class="theme-table month-theme-table phase-table">
+        <thead>
+          <tr>
+            <th>節入り</th>
+            <th>月運</th>
+            <th>日干支への作用</th>
+            <th>月干支への作用</th>
+            <th>年干支への作用</th>
+            <th>テーマ</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${chart.monthLucks.map((luck) => {
+            const summaries = phaseSummaryForLuck(chart, luck);
+            const day = summaries.find((item) => item.key === "day");
+            const month = summaries.find((item) => item.key === "month");
+            const year = summaries.find((item) => item.key === "year");
+            const isTenchu = isTenchusatsuLuck(tenchusatsu, luck);
+
+            return `
+              <tr class="${isTenchu ? "is-tenchusatsu-year" : ""}">
+                <td>${api.formatJst(luck.start, false)}</td>
+                <td class="star-cell">
+                  <strong>${luck.label}</strong>
+                  <span>${luck.tenStar} / ${luck.lifeStar.name}</span>
+                  ${isTenchu ? `<span class="tenchu-badge">月天中殺</span>` : ""}
+                </td>
+                <td class="theme-cell">
+                  <div class="phase-mini">
+                    <div><strong>${chart.day.label}</strong>${relationBadges(day.relations)}</div>
+                    <span>${day.relations.length ? day.relations.join("・") : "通常"}</span>
+                  </div>
+                </td>
+                <td class="theme-cell">
+                  <div class="phase-mini">
+                    <div><strong>${chart.month.label}</strong>${relationBadges(month.relations)}</div>
+                    <span>${month.relations.length ? month.relations.join("・") : "通常"}</span>
+                  </div>
+                </td>
+                <td class="theme-cell">
+                  <div class="phase-mini">
+                    <div><strong>${chart.year.label}</strong>${relationBadges(year.relations)}</div>
+                    <span>${year.relations.length ? year.relations.join("・") : "通常"}</span>
+                  </div>
+                </td>
+                <td class="theme-cell">
+                  <div class="theme-stars">${monthPhaseHeadline(chart, luck)}</div>
+                  ${isTenchu ? tenchusatsu.yearAdvice : themeForLuck(luck, "month")}
+                </td>
+              </tr>
+            `;
+          }).join("")}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+  function renderAll(chart) {
+  renderSummary(chart);
+  renderDayPillarReading(chart);
+  renderTenchusatsu(chart);
+  renderYin(chart);
+  renderYang(chart);
+  renderBalance(chart);
+  renderBigLuck(chart);
+  renderYearLuck(chart);
+  renderMonthLuck(chart);
+  renderPhasePanel(chart);
+  renderMonthlyGuide(chart);
+}
 
     function calculateFromForm() {
       const errorBox = $("#errorBox");
